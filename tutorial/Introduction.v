@@ -117,7 +117,11 @@ Lemma interp_write_one F (handle_io : forall R, ioE R -> itree F R)
 Proof.
   unfold write_one.
   (* Use lemmas from [ITree.Simple] ([theories/Simple.v]). *)
-  (* FILL IN HERE *) Admitted.
+  (* FILL IN HERE *)
+  rewrite interp_bind, interp_trigger.
+  setoid_rewrite interp_trigger.
+  reflexivity.
+Qed.
 
 (** An [itree void1] is a computation which can either return a value,
     or loop infinitely. Since Coq is total, [interpreted_write_one]
@@ -184,7 +188,7 @@ Definition factorial (n : nat) : itree E nat :=
 
     We can force the computation with fuel, e.g., using [burn]...
  *)
-Compute (burn 100 (factorial 5)).
+Compute (burn 6 (factorial 5)).
 
 (** ... or with tactics, such as [tau_steps], which removes
     all taus from the left-hand side of an [≈] equation. *)
@@ -224,7 +228,15 @@ Lemma unfold_factorial : forall x,
 Proof.
   intros x.
   unfold factorial.
-  (* FILL IN HERE *) Admitted.
+  (* FILL IN HERE *)
+  rewrite rec_as_interp.
+  destruct x as [| m]; simpl.
+  - rewrite interp_ret. reflexivity.
+  - rewrite interp_bind. unfold call.
+    rewrite interp_trigger.
+    setoid_rewrite interp_ret.
+    reflexivity.
+Qed.
 
 (** We can prove that the ITrees version [factorial] is "equivalent"
     to the [factorial_spec] version.  The proof goes by induction on
@@ -240,7 +252,12 @@ Lemma factorial_correct : forall n,
     factorial n ≈ Ret (factorial_spec n).
 Proof.
   intros n.
-  (* FILL IN HERE *) Admitted.
+  (* FILL IN HERE *)
+  induction n as [| n IHn];
+    rewrite unfold_factorial; progress simpl.
+  - reflexivity.
+  - rewrite IHn, bind_ret. reflexivity.
+Qed.
 
 (** ** Fibonacci *)
 
@@ -258,8 +275,16 @@ Fixpoint fib_spec (n : nat) : nat :=
     end
   end.
 
-Definition fib_body : nat -> itree (callE nat nat +' E) nat
-  (* REPLACE THIS LINE WITH ":= _your_definition_ ." *). Admitted.
+Definition fib_body (n : nat) : itree (callE nat nat +' E) nat :=
+  (* REPLACE THIS LINE WITH ":= _your_definition_ ." *)
+  match n with
+  | 0 as k
+  | 1 as k => Ret k
+  | S (S k) =>
+      x <- call k;;
+      y <- call (S k);;
+      Ret (x + y)
+  end.
 
 Definition fib n : itree E nat :=
   rec fib_body n.
@@ -267,7 +292,10 @@ Definition fib n : itree E nat :=
 Example fib_3_6 : mapT fib [4;5;6] ≈ Ret [3; 5; 8].
 Proof.
   (* Use [tau_steps] to compute. *)
-  (* FILL IN HERE *) Admitted.
+  (* FILL IN HERE *)
+  tau_steps.
+  reflexivity.
+Qed.
 
 (** Since fib uses two recursive calls, we need to strengthen the
     induction hypothesis.  One way to do that is to prove the
@@ -289,11 +317,25 @@ Proof.
   induction n as [ | n' IH ]; intros.
   - (* n = 0 *)
     apply Nat.le_0_r in H. subst m.
-    (* FILL IN HERE *) admit.
+    (* FILL IN HERE *)
+    rewrite rec_as_interp. simpl.
+    rewrite interp_ret. reflexivity.
   - (* n = S n' *)
     apply Nat.le_succ_r in H.
-    (* FILL IN HERE *) admit.
-(* FILL IN HERE *) Admitted.
+    (* FILL IN HERE *)
+    destruct H as [H | ->]; auto.
+    rewrite rec_as_interp. simpl.
+    destruct n' as [| k].
+    + rewrite interp_ret. reflexivity.
+    + rewrite interp_bind.
+      setoid_rewrite interp_trigger.
+      simpl. rewrite IH by lia.
+      rewrite bind_ret, interp_bind.
+      setoid_rewrite interp_trigger.
+      simpl. rewrite IH by lia.
+      rewrite bind_ret, interp_ret.
+      reflexivity.
+Qed.
 
 (** ** Logarithm *)
 
@@ -306,12 +348,39 @@ Proof.
     (Note that this only constrains a very small subset of inputs,
     and in fact our solution diverges for some of them.)
  *)
-Definition log (b : nat) : nat -> itree E nat
-  (* REPLACE THIS LINE WITH ":= _your_definition_ ." *). Admitted.
+(** NOTE: Peeked at Mathlib defs for Nat.log. *)
+Definition log (b : nat) : nat -> itree E nat :=
+  (* REPLACE THIS LINE WITH ":= _your_definition_ ." *)
+  rec-fix log n :=
+    if ((b <=? 1)%nat || (n <? b)%nat)%bool then
+      Ret 0
+    else
+      x <- log (n / b) ;;
+      Ret (1 + x).
+
+Lemma log_rec (b n : nat) :
+  log b n ≈
+    (if ((b <=? 1)%nat || (n <? b)%nat)%bool then
+       Ret 0
+     else
+       x <- log b (n / b) ;;
+       Ret (1 + x)).
+Proof.
+  setoid_rewrite rec_as_interp at 1.
+  destruct ((b <=? 1)%nat || (n <? b)%nat)%bool as [|] eqn:Hb.
+  - rewrite interp_ret. reflexivity.
+  - simpl. rewrite interp_bind.
+    setoid_rewrite interp_ret.
+    setoid_rewrite interp_trigger.
+    reflexivity.
+Qed.
 
 Example log_2_64 : log 2 (2 ^ 6) ≈ Ret 6.
 Proof.
-  (* FILL IN HERE *) Admitted.
+  (* FILL IN HERE *)
+  tau_steps.
+  reflexivity.
+Qed.
 
 (** These lemmas take care of the boring arithmetic. *)
 Lemma log_correct_helper :
@@ -335,4 +404,13 @@ Qed.
 Lemma log_correct : forall b y, 1 < b -> log b (b ^ y) ≈ Ret y.
 Proof.
   intros b y H.
-  (* FILL IN HERE *) Admitted.
+  (* FILL IN HERE *)
+  induction y as [| y IHy];
+    rewrite log_rec, (leb_correct_conv 1 b) by lia; simpl.
+  - rewrite (proj2 (Nat.ltb_lt 1 b)) by lia.
+    reflexivity.
+  - rewrite (proj2 (Nat.ltb_ge (b * b ^ y) b)).
+    2:{ apply Nat.le_mul_r, Nat.pow_nonzero. lia. }
+    rewrite log_correct_helper2 by assumption.
+    rewrite IHy, bind_ret. reflexivity.
+Qed.
