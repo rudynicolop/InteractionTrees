@@ -33,6 +33,7 @@ Import Monads.
 (** ** Syntax *)
 
 (** We define a countable set of memory addresses, represented as [string]s: *)
+(* NOTE: so identical to variables? *)
 Definition addr : Set := string.
 
 (** We define a set of register names (for this simple example, we identify them
@@ -44,8 +45,8 @@ Definition value : Set := nat.
 
 (** We consider constants and variables as operands. *)
 Variant operand : Set :=
-| Oimm (_ : value)
-| Oreg (_ : reg).
+| Oimm (_ : value) (* Constants *)
+| Oreg (_ : reg)   (* Registers *).
 
 (** The instruction set covers moves and arithmetic operations, as well as load
     and stores to the heap.  *)
@@ -62,16 +63,20 @@ Variant instr : Set :=
 | Istore (addr : addr) (val : operand).
 
 (** We consider both direct and conditional jumps *)
+(* NOTE: even though [label] may be an arbitrary type here,
+   in [bks] and [asm] it's always a [fin n] for [n : nat]. *)
 Variant branch {label : Type} : Type :=
 | Bjmp (_ : label)                (* jump to label *)
 | Bbrz (_ : reg) (yes no : label) (* conditional jump *)
-| Bhalt
+| Bhalt                           (* terminate execution, errorful? *)
 .
 Global Arguments branch _ : clear implicits.
 
 (** A basic [block] is a sequence of straightline instructions followed by a
     branch that either halts the execution, or transfers control to another
     [block]. *)
+(* NOTE: even though [label] may be an arbitrary type here,
+   in [bks] and [asm] it's always a [fin n] for [n : nat]. *)
 Inductive block {label : Type} : Type :=
 | bbi (_ : instr) (_ : block)
 | bbb (_ : branch label).
@@ -257,6 +262,7 @@ Section Denote.
       accomplish this with the same [loop] combinator we used to denote _Imp_'s
       [while] loop.  It directly takes our [denote_bks (code s): ktree E (I + A)
       (I + B)] and hides [I] as desired.  *)
+    (* TODO: what is [loop] doing? *)
     Definition denote_asm {A B} : asm A B -> sub (ktree E) fin A B :=
       fun s => loop (denote_bks (code s)).
 
@@ -287,6 +293,14 @@ Instance RelDec_reg : RelDec (@eq reg) := RelDec_from_dec eq Nat.eq_dec.
 (** Both environments and memory events can be interpreted as "map" events,
     exactly as we did for _Imp_. *)
 
+Locate "_ -< _".
+Print IFun.
+Locate "_ ~> _".
+Print ReSum.
+Check mapE reg 0.
+Print mapE.
+
+(* NOTE: [0] is the default value in registers. *)
 Definition h_reg {E: Type -> Type} `{mapE reg 0 -< E}
   : Reg ~> itree E :=
   fun _ e =>
@@ -295,6 +309,7 @@ Definition h_reg {E: Type -> Type} `{mapE reg 0 -< E}
     | SetReg x v => insert x v
     end.
 
+(* NOTE: [0] is the default value in memory. *)
 Definition h_memory {E : Type -> Type} `{mapE addr 0 -< E} :
   Memory ~> itree E :=
   fun _ e =>
@@ -328,6 +343,7 @@ Definition run_asm (p : asm 1 0) : itree Exit (memory * (registers * fin 0)) :=
 
 (* SAZ: Should some of thes notions of equivalence be put into the library?
    SAZ: Should this be stated in terms of ktree ?
+   RNP: No. It's too abstract. This I can sortof understand.
  *)
 (** The definition [interp_asm] also induces a notion of equivalence (open)
     _asm_ programs, which is just the equivalence of the ktree category *)
@@ -343,6 +359,9 @@ Section InterpAsmProperties.
   Notation E := (Reg +' Memory +' E').
 
   (** This interpreter is compatible with the equivalence-up-to-tau. *)
+  (* NOTE: we (setoid) rewrite the input trees [t1 a] and [t2 a] in the
+     overall result
+     [interp_asm (t1 a) mem regs ≈ interp_asm (t2 a) mem regs]. *)
   #[global]
   Instance eutt_interp_asm {R}:
     Proper (@eutt E R R eq ==> eq ==> eq ==> @eutt E' (prod memory (prod registers R)) (prod _ (prod _ R)) eq) interp_asm.

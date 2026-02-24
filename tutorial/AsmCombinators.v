@@ -19,6 +19,8 @@
     principles so that we do not need to write any cofix here.
  *)
 
+(* NOTE: WTF is a _traced monoidal category_? *)
+
 (* begin hide *)
 From Coq Require Import
      List
@@ -78,6 +80,10 @@ Definition app_bks {A B C D : nat} (ab : bks A B) (cd : bks C D)
     | inr c => fmap_block (R _) (cd c)
     end.
 
+(* NOTE: Bruh. *)
+Goal forall A B, sub Fun fin A B = (fin A -> fin B).
+Proof. reflexivity. Qed.
+
 (** Simple combinator to build a [block] from its instructions and branch operation. *)
 Fixpoint after {A: Type} (is : list instr) (bch : branch A) : block A :=
   match is with
@@ -88,6 +94,7 @@ Fixpoint after {A: Type} (is : list instr) (bch : branch A) : block A :=
 (* SAZ: rationalize the names of the combinators? *)
 (** Another combinator that appends a list of instructions to the beginning of a
     block *)
+(* RNP: one could even say that we _prepend_ [l] to [b], or append [b] to [l]. *)
 Fixpoint blk_append {lbl} (l:list instr) (b:block lbl) : block lbl :=
   match l with
   | [] => b
@@ -131,6 +138,9 @@ Definition id_asm {A} : asm A A := pure_asm id.
 (* We build a function from F X into block (F Y), we hence cannot use case_ whether over iFun or sktree.
    Can we do better?
  *)
+(* NOTE: So "vertical composition" is linking?
+   I thought that was "horizontal composition"...? *)
+(* NOTE: [swap4] is so opaque with its type and definition, jesus. *)
 Definition app_asm {A B C D} (ab : asm A B) (cd : asm C D) :
   asm (A + C) (B + D) :=
   {| internal := ab.(internal) + cd.(internal);
@@ -150,6 +160,7 @@ Definition relabel_asm {A B C D} (f : sub Fun fin A B) (g : sub Fun fin C D)
 (** Labels that are exposed both as entry and exit points can be internalized.
     This operation can be seen as linking two programs internal to [ab] together.
  *)
+(* NOTE: [assoc_l] and [assoc_r] are opaque with its type and definition, jesus. *)
 Definition loop_asm {I A B} (ab : asm (I + A) (I + B)) : asm A B :=
   {| internal := ab.(internal) + I;
      code := relabel_bks assoc_r assoc_l ab.(code);
@@ -187,6 +198,7 @@ Section Correctness.
 
   (** *** Internal structures *)
 
+  (* NOTE: commute the denotation with mapping [f]. *)
   Lemma fmap_block_map:
     forall  {L L'} b (f: fin L -> fin L'),
       denote_bk (fmap_block f b) ≅ ITree.map f (denote_bk b).
@@ -265,6 +277,7 @@ Section Correctness.
     reflexivity.
   Qed.
 
+  (* NOTE: [f >>> g] is morphism composition.  *)
   Lemma raw_asm_correct {A B} (b : bks A B) :
     denote_asm (raw_asm b) ⩯ (fun a => denote_bk (b a)).
   Proof.
@@ -275,6 +288,11 @@ Section Correctness.
     rewrite cat_id_l, cat_id_r.
     reflexivity.
   Qed.
+
+  (* NOTE: equivalence between morphisms. *)
+  Locate "_ ⩯ _".
+  About eq2.
+  Search (_ ⩯ _).
 
   (** Correctness of the [raw_asm] operator.
       Its denotation is the same as the denotation of the block.
@@ -319,6 +337,10 @@ Section Correctness.
     rewrite pure_asm_correct; reflexivity.
   Defined.
 
+  (* NOTE: Full type of [subpure]. *)
+  Check @subpure :
+    forall {E : Type -> Type} {n m : nat}, (fin n -> fin m) -> fin n -> itree E (fin m).
+
   (** Correctness of the [relabel_asm] combinator.
       Its denotation is the same as denoting the original [asm],
       and composing it on both sides with the renaming functions
@@ -340,7 +362,16 @@ Section Correctness.
   Lemma app_bks_correct: forall {A B C D: nat} (ab: bks A B) (cd: bks C D),
     denote_bks (app_bks ab cd) ⩯ bimap (denote_bks ab) (denote_bks cd).
   Proof.
-    intros. rewrite bimap_case_unfold.
+    intros.
+    Check denote_bks (app_bks ab cd)
+      : fin (A + C) -> itree E (fin (B + D)).
+    Check bimap (denote_bks ab) (denote_bks cd)
+      : fin (A + C) -> itree E (fin (B + D)).
+    Set Printing Implicit.
+    About Bimap_Coproduct.
+    (* NOTE: So there's some notion of [bimap] for [fin (n + m)] acting on [fin n] and [fin m]? wtf *)
+    Unset Printing Implicit.
+    rewrite bimap_case_unfold.
     intros ?.
     unfold app_bks, denote_bks.
 
@@ -386,6 +417,7 @@ Section Correctness.
     match goal with | |- ?x ⩯ _ => set (lhs := x) end.
     rewrite loop_superposing.   (* a loop superposed atop another diagram can englob the latter *)
     rewrite loop_superposing_2. (* as well as if the loop is under... But it takes a bit more rewiring! *)
+    (* NOTE: Natural transformation condition. *)
     rewrite loop_natural_left.  (* a loop append to diagrams can swallow them... *)
     rewrite loop_natural_right. (* ... from either side. *)
     rewrite loop_vanishing_2.   (* Finally, two nested loop can be combined. *)

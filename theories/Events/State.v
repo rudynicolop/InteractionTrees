@@ -26,6 +26,13 @@ Local Open Scope itree_scope.
    [E ~> state S] define stateful itree morphisms
    [itree E ~> stateT S (itree F)]. *)
 
+(* NOTE:
+
+  Rudy: How do we compute a non-itree [M] from a coninductive input itree?
+
+  Future Rudy: Nah bro, note that [M] needes to be an iterative monad, [MonadIter M],
+  and in (probably all) most places [interp_state] is invoked the result [M] is an
+  [itree], don't sweat it they just want to generalize. *)
 Definition interp_state {E M S}
            {FM : Functor M} {MM : Monad M}
            {IM : MonadIter M} (h : E ~> stateT S M) :

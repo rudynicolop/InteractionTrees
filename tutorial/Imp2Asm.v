@@ -108,6 +108,7 @@ We obtain the following diagram:
 
 Which translates to:
  *)
+(* NOTE: why do we loop? Is this just to close "internal" labels? *)
 Definition seq_asm {A B C} (ab : asm A B) (bc : asm B C)
   : asm A C :=
   loop_asm (relabel_asm swap (id_ _) (app_asm ab bc)).
